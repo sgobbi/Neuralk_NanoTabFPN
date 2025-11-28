@@ -4,53 +4,56 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 import openml
 
-# -----------------------------
-# 1. Load a dataset
-# -----------------------------
-dataset_id = 31  # Example: "credit-g" from OpenML
-dataset = openml.datasets.get_dataset(dataset_id)
-X, y, _, _ = dataset.get_data(target=dataset.default_target_attribute, dataset_format="dataframe")
 
-# Convert to numpy arrays
-X = X.values
-y = y.values
+def create_nthing():
+    return False
 
-# -----------------------------
-# 2. Define synthetic "tasks"
-# -----------------------------
-num_tasks = 1000       # how many tasks you want to generate
-context_rows = 20      # number of rows per task/context
-num_features = X.shape[1]
+def load_dataset(dataset_id):
+    dataset = openml.datasets.get_dataset(dataset_id, download_all_files=True)
+    X, y, _, _ = dataset.get_data(
+    target=dataset.default_target_attribute,
+    dataset_format="dataframe")
+    return (X,y)
+    
 
-# Preallocate arrays for HDF5
-X_tasks = np.zeros((num_tasks, context_rows, num_features), dtype=np.float32)
-y_tasks = np.zeros((num_tasks, context_rows), dtype=np.int64)
-train_test_split_indices = np.zeros(num_tasks, dtype=np.int64)
+def create_h5_prior_from_X_y(X, y, filename, 
+                                 num_tasks=5000,
+                                 total_rows=40,
+                                 train_rows=30):
 
-for i in range(num_tasks):
-    # Randomly sample context_rows rows for this task
-    idx = np.random.choice(len(X), context_rows, replace=False)
-    X_task = X[idx]
-    y_task = y[idx]
+    X_np = np.ascontiguousarray(X.to_numpy(), dtype='float32')
+    y_np = np.ascontiguousarray(pd.Categorical(y).codes, dtype='int32')
 
-    # Split train/test within the context
-    split = int(0.8 * context_rows)  # 80% train
-    train_test_split_indices[i] = split
+    num_features = X_np.shape[1]
+    max_num_classes = len(np.unique(y_np))
 
-    X_tasks[i, :context_rows, :] = X_task
-    y_tasks[i, :context_rows] = y_task
+    with h5py.File(filename, "w") as f:
+        f.create_dataset("X", shape=(num_tasks, total_rows, num_features), dtype='float32')
+        f.create_dataset("y", shape=(num_tasks, total_rows), dtype='int32')
 
-# -----------------------------
-# 3. Save to HDF5
-# -----------------------------
-filename = "my_dataset_prior.h5"
-with h5py.File(filename, "w") as f:
-    f.create_dataset("X", data=X_tasks)
-    f.create_dataset("y", data=y_tasks)
-    f.create_dataset("num_features", data=[num_features])
-    f.create_dataset("num_datapoints", data=[context_rows]*num_tasks)
-    f.create_dataset("single_eval_pos", data=train_test_split_indices)
-    # optional metadata
-    f.create_dataset("max_num_classes", data=[len(np.unique(y))])
+        f.create_dataset("num_features", shape=(num_tasks,), dtype='int32')
+        f.create_dataset("num_datapoints", shape=(num_tasks,), dtype='int32')
+        f.create_dataset("single_eval_pos", shape=(num_tasks,), dtype='int32')
+        f.create_dataset("max_num_classes", data=[max_num_classes])
 
-print(f"Saved prior to {filename}")
+        n_samples = len(X_np)
+
+        for i in range(num_tasks):
+            idx = np.random.choice(n_samples, total_rows, replace=True)
+
+            X_task = X_np[idx].astype('float32')
+            y_task = y_np[idx].astype('int32')
+
+            f["X"][i, :, :] = X_task
+            f["y"][i, :] = y_task
+
+            f["num_features"][i] = num_features
+            f["num_datapoints"][i] = total_rows
+            f["single_eval_pos"][i] = train_rows
+
+    print(f"Saved tasks to {filename}")
+
+
+def create_h5_prior_from_dataset(dataset_id, filename, num_tasks = 500, total_rows = 40, train_rows = 30):
+    X,y = load_dataset(dataset_id)
+    create_h5_prior_from_X_y(X, y ,filename, num_tasks, total_rows, train_rows) 
