@@ -29,7 +29,7 @@ def create_h5_prior_from_X_y(X, y, filename,
 
     with h5py.File(filename, "w") as f:
         f.create_dataset("X", shape=(num_tasks, total_rows, num_features), dtype='float32')
-        f.create_dataset("y", shape=(num_tasks, total_rows), dtype='int32')
+        f.create_dataset("y", shape=(num_tasks, total_rows), dtype='float32')
 
         f.create_dataset("num_features", shape=(num_tasks,), dtype='int32')
         f.create_dataset("num_datapoints", shape=(num_tasks,), dtype='int32')
@@ -42,7 +42,7 @@ def create_h5_prior_from_X_y(X, y, filename,
             idx = np.random.choice(n_samples, total_rows, replace=True)
 
             X_task = X_np[idx].astype('float32')
-            y_task = y_np[idx].astype('int32')
+            y_task = y_np[idx].astype('float32')
 
             f["X"][i, :, :] = X_task
             f["y"][i, :] = y_task
@@ -51,9 +51,9 @@ def create_h5_prior_from_X_y(X, y, filename,
             f["num_datapoints"][i] = total_rows
             f["single_eval_pos"][i] = train_rows
 
-    print(f"Saved tasks to {filename}")
+    print(f"Saved tasks here here  to {filename}")
 
 
-def create_h5_prior_from_dataset(dataset_id, filename, num_tasks = 500, total_rows = 40, train_rows = 30):
+def create_h5_prior_from_dataset(dataset_id, filename, num_tasks = 5000, total_rows = 40, train_rows = 30):
     X,y = load_dataset(dataset_id)
     create_h5_prior_from_X_y(X, y ,filename, num_tasks, total_rows, train_rows) 
