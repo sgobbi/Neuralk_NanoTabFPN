@@ -3,6 +3,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torch.nn.modules.transformer import MultiheadAttention, Linear, LayerNorm
+from attentions import LocalAttention
 
 class NanoTabPFNModel(nn.Module):
     def __init__(self, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int, num_layers: int, num_outputs: int, attention_type: str = "original"):
@@ -100,8 +101,12 @@ class TransformerEncoderLayer(nn.Module):
                  layer_norm_eps: float = 1e-5, batch_first: bool = True,
                  device=None, dtype=None):
         super().__init__()
-        self.self_attention_between_datapoints = MultiheadAttention(embedding_size, nhead, batch_first=batch_first, device=device, dtype=dtype)
         self.self_attention_between_features = MultiheadAttention(embedding_size, nhead, batch_first=batch_first, device=device, dtype=dtype)
+        
+        if attention_type == "Original":
+            self.self_attention_between_datapoints = MultiheadAttention(embedding_size, nhead, batch_first=batch_first, device=device, dtype=dtype)
+        elif attention_type == "Local":
+            self.self_attention_between_datapoints = LocalAttention(embedding_size, nhead)
 
         self.linear1 = Linear(embedding_size, mlp_hidden_size, device=device, dtype=dtype)
         self.linear2 = Linear(mlp_hidden_size, embedding_size, device=device, dtype=dtype)
