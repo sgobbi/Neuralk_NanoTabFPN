@@ -80,6 +80,8 @@ def train(model: NanoTabPFNModel, prior: DataLoader,
     try:
         for step, full_data in enumerate(prior):
             step_start_time = time.time()
+            torch.cuda.reset_peak_memory_stats(device)
+
             train_test_split_index = full_data["train_test_split_index"]
             #if (torch.isnan(data[0]).any() or torch.isnan(data[1]).any()):
             #    continue
@@ -103,6 +105,9 @@ def train(model: NanoTabPFNModel, prior: DataLoader,
             step_train_duration = time.time() - step_start_time
             train_time += step_train_duration
 
+            peak_mem_MB = torch.cuda.max_memory_allocated(device) / 1e6
+            current_mem_MB = torch.cuda.memory_allocated(device) / 1e6
+
             # evaluate
             if step % steps_per_eval == steps_per_eval-1 and eval_func is not None:
                 model.eval()
@@ -110,14 +115,15 @@ def train(model: NanoTabPFNModel, prior: DataLoader,
 
                 classifier = NanoTabPFNClassifier(model, device)
                 scores = eval_func(classifier)
-                eval_history.append((train_time, scores))
-                score_str = " | ".join([f"{k} {v:7.4f}" for k,v in scores.items()])
-                print(f"time {train_time:7.1f}s | loss {total_loss:7.4f} | {score_str}")
+                eval_history.append((train_time, peak_mem_MB, scores))
+                score_str = " | ".join([f"{k} {v:7.4f}" for k, v in scores.items()])
+                print(f"time {train_time:7.1f}s | peak_mem {peak_mem_MB:7.1f}MB | loss {total_loss:7.4f} | {score_str}")
 
                 model.train()
                 optimizer.train()
             elif step % steps_per_eval == steps_per_eval-1 and eval_func is None:
-                print(f"time {train_time:7.1f}s | loss {total_loss:7.4f}")
+                eval_history.append((train_time, peak_mem_MB, {}))
+                print(f"time {train_time:7.1f}s | peak_mem {peak_mem_MB:7.1f}MB | loss {total_loss:7.4f}")
     except KeyboardInterrupt:
         pass
 
