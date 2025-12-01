@@ -5,15 +5,16 @@ from torch import nn
 from torch.nn.modules.transformer import MultiheadAttention, Linear, LayerNorm
 
 class NanoTabPFNModel(nn.Module):
-    def __init__(self, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int, num_layers: int, num_outputs: int):
+    def __init__(self, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int, num_layers: int, num_outputs: int, attention_type: str = "original"):
         """ Initializes the feature/target encoder, transformer stack and decoder """
         super().__init__()
         self.feature_encoder = FeatureEncoder(embedding_size)
         self.target_encoder = TargetEncoder(embedding_size)
         self.transformer_blocks = nn.ModuleList()
         for _ in range(num_layers):
-            self.transformer_blocks.append(TransformerEncoderLayer(embedding_size, num_attention_heads, mlp_hidden_size))
+            self.transformer_blocks.append(TransformerEncoderLayer(embedding_size, num_attention_heads, mlp_hidden_size, attention_type))
         self.decoder = Decoder(embedding_size, mlp_hidden_size, num_outputs)
+        self.attention_type = attention_type
 
     def forward(self, src: tuple[torch.Tensor, torch.Tensor], train_test_split_index: int) -> torch.Tensor:
         x_src, y_src = src
@@ -95,7 +96,7 @@ class TransformerEncoderLayer(nn.Module):
     """
     Modified version of older version of https://github.com/pytorch/pytorch/blob/v2.6.0/torch/nn/modules/transformer.py#L630
     """
-    def __init__(self, embedding_size: int, nhead: int, mlp_hidden_size: int,
+    def __init__(self, embedding_size: int, nhead: int, mlp_hidden_size: int, attention_type : str,
                  layer_norm_eps: float = 1e-5, batch_first: bool = True,
                  device=None, dtype=None):
         super().__init__()
