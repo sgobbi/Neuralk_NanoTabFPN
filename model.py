@@ -118,6 +118,9 @@ class TransformerEncoderLayer(nn.Module):
         elif attention_type == "Sparse":
             self.self_attention_between_datapoints_train = SparseAttention(embedding_size, nhead)
             self.self_attention_between_datapoints_test = MultiHeadAttentionFromScratch(embedding_size, nhead)
+        else:
+            self.self_attention_between_datapoints_train = MultiheadAttention(embedding_size, nhead, batch_first=batch_first, device=device, dtype=dtype)
+            self.self_attention_between_datapoints_test = MultiheadAttention(embedding_size, nhead, batch_first=batch_first, device=device, dtype=dtype)
 
 
         self.linear1 = Linear(embedding_size, mlp_hidden_size, device=device, dtype=dtype)

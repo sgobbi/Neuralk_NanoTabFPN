@@ -201,7 +201,18 @@ def collect_inference_times(model_state_dicts):
 
             # Measure inference time
             print(state_dict, model_name, flush = True)
-            inf_time = measure_inference_time_from_state_dict(state_dict, 
+            if model_name == "Single Layer":
+                inf_time = measure_inference_time_from_state_dict(state_dict, 
+                                                  embedding_size = 96, 
+                                                  num_heads= 4, 
+                                                  mlp_hidden_size= 192, 
+                                                  num_layers= 1, 
+                                                  num_outputs= 3, 
+                                                  attention_type=model_name, 
+                                                  dataset = dataset
+                                                    )
+            else:
+                inf_time = measure_inference_time_from_state_dict(state_dict, 
                                                   embedding_size = 96, 
                                                   num_heads= 4, 
                                                   mlp_hidden_size= 192, 
