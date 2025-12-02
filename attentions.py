@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
+import math
 
 
 class MultiHeadAttentionFromScratch(nn.Module):
@@ -270,3 +271,75 @@ class SparseAttention(nn.Module):
         out = out.transpose(1, 2).contiguous().view(batch_size, seq_len, self.d_model)
         
         return self.w_o(out), attn 
+    
+
+
+
+class BlockSparseAttention(nn.Module):
+    def __init__(self, d_model, n_heads, block_size=32):
+        super().__init__()
+        assert d_model % n_heads == 0
+        self.d_model = d_model
+        self.n_heads = n_heads
+        self.block_size = block_size
+
+        self.head_dim = d_model // n_heads
+
+        self.q_proj = nn.Linear(d_model, d_model)
+        self.k_proj = nn.Linear(d_model, d_model)
+        self.v_proj = nn.Linear(d_model, d_model)
+        self.out = nn.Linear(d_model, d_model)
+
+    def forward(self, x):
+        B, N, _ = x.shape
+        H = self.n_heads
+        D = self.head_dim
+        BZ = self.block_size
+
+        # Project to Q, K, V
+        q = self.q_proj(x).view(B, N, H, D).transpose(1, 2)  # (B, H, N, D)
+        k = self.k_proj(x).view(B, N, H, D).transpose(1, 2)
+        v = self.v_proj(x).view(B, N, H, D).transpose(1, 2)
+
+        # Split into blocks
+        assert N % BZ == 0, "Sequence length must be divisible by block size"
+        n_blocks = N // BZ
+
+        # Output buffer
+        out = torch.zeros_like(q)
+
+        for b in range(n_blocks):
+            # Current block range
+            q_idx = slice(b * BZ, (b + 1) * BZ)
+
+            # Determine which K/V blocks this block attends to
+            attend_blocks = []
+
+            # local block (itself + neighbors)
+            attend_blocks.append(b)
+            if b > 0:
+                attend_blocks.append(b - 1)
+            if b < n_blocks - 1:
+                attend_blocks.append(b + 1)
+
+            # global block 0 attends to everything
+            if b == 0:
+                attend_blocks = list(range(n_blocks))
+
+            # Gather K/V for selected blocks
+            k_idx = [slice(i * BZ, (i + 1) * BZ) for i in attend_blocks]
+            k_sel = torch.cat([k[:, :, idx, :] for idx in k_idx], dim=2)  # (B,H,S,D)
+            v_sel = torch.cat([v[:, :, idx, :] for idx in k_idx], dim=2)
+
+            # Compute attention
+            q_chunk = q[:, :, q_idx, :]                        # (B,H,BZ,D)
+            att = torch.matmul(q_chunk, k_sel.transpose(-2, -1)) / math.sqrt(D)
+            att = torch.softmax(att, dim=-1)                  # (B,H,BZ,S)
+            out_chunk = torch.matmul(att, v_sel)              # (B,H,BZ,D)
+
+            # Write back
+            out[:, :, q_idx, :] = out_chunk
+
+        # Recombine heads
+        out = out.transpose(1, 2).contiguous().view(B, N, -1)
+        return self.out(out)
