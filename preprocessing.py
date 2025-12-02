@@ -13,6 +13,7 @@ def load_dataset(dataset_id):
     X, y, _, _ = dataset.get_data(
     target=dataset.default_target_attribute,
     dataset_format="dataframe")
+    print("table size = ", X.shape, flush = True)
     return (X,y)
     
 
