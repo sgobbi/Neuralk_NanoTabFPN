@@ -3,6 +3,7 @@ import torch
 import pandas as pd
 from model import NanoTabPFNModel
 import time
+from train import PriorDumpDataLoader
 
 def plot_train_loss_vs_step(model_histories, label=None):
     """
@@ -141,3 +142,76 @@ def measure_inference_time_from_state_dict(state_dict_path: str, embedding_size,
     
     avg_time_per_sample = total_time / total_samples
     return avg_time_per_sample
+
+
+def summarize_training_times(model_histories):
+    """
+    model_histories: dict {model_name: pd.DataFrame}
+
+    Returns a dataframe with:
+    - model name
+    - full training time (seconds)
+    - average step training time (seconds)
+    """
+    rows = []
+
+    for model_name, df in model_histories.items():
+
+        full_training_time = df["cumulative time"].iloc[-1]
+        avg_step_time = df["step time"].mean()
+
+        rows.append({
+            "model name": model_name,
+            "full training time": full_training_time,
+            "average step time": avg_step_time
+        })
+
+    return pd.DataFrame(rows)
+
+
+def collect_inference_times(model_state_dicts):
+    """
+    model_state_dicts : dict {model_name: state_dict}
+    measure_fn        : function(model_name, state_dict, num_rows) -> float
+
+    Returns a DataFrame with columns:
+    ['model name', '40 rows', '100 rows', '500 rows', '1000 rows']
+    """
+
+    num_row_configs = {
+        "40 rows":   "40_30",
+        "100 rows":  "100_80",
+        "500 rows":  "500_400",
+        "1000 rows": "1000_800"
+    }
+
+    rows = []
+
+    for model_name, state_dict in model_state_dicts.items():
+        row = {"model name": model_name}
+
+        for col_name, num_row_tag in num_row_configs.items():
+
+            # Load the dataset
+            dataset = PriorDumpDataLoader(
+                f"h5_files/evaluation_wine_dataset_{num_row_tag}_rows.h5",
+                num_steps=50,
+                batch_size=10
+            )
+
+            # Measure inference time
+            print(state_dict, model_name, flush = True)
+            inf_time = measure_inference_time_from_state_dict(state_dict, 
+                                                  embedding_size = 96, 
+                                                  num_heads= 4, 
+                                                  mlp_hidden_size= 192, 
+                                                  num_layers= 3, 
+                                                  num_outputs= 3, 
+                                                  attention_type=model_name, 
+                                                  dataset = dataset
+                                                    )
+            row[col_name] = inf_time
+
+        rows.append(row)
+
+    return pd.DataFrame(rows)

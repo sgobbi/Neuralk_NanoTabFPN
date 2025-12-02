@@ -6,7 +6,7 @@ from torch.nn.modules.transformer import MultiheadAttention, Linear, LayerNorm
 from attentions import MultiHeadAttentionFromScratch, LocalSlidingWindowAttention, LocalSlidingWindowAttentionOptimized, SparseAttention
 
 class NanoTabPFNModel(nn.Module):
-    def __init__(self, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int, num_layers: int, num_outputs: int, attention_type: str = "Pytorch"):
+    def __init__(self, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int, num_layers: int, num_outputs: int, attention_type: str = "Original"):
         """ Initializes the feature/target encoder, transformer stack and decoder """
         super().__init__()
         self.feature_encoder = FeatureEncoder(embedding_size)
@@ -103,7 +103,7 @@ class TransformerEncoderLayer(nn.Module):
         super().__init__()
         self.self_attention_between_features = MultiheadAttention(embedding_size, nhead, batch_first=batch_first, device=device, dtype=dtype)
         
-        if attention_type == "Pytorch":
+        if attention_type == "Original":
             self.self_attention_between_datapoints_train = MultiheadAttention(embedding_size, nhead, batch_first=batch_first, device=device, dtype=dtype)
             self.self_attention_between_datapoints_test = MultiheadAttention(embedding_size, nhead, batch_first=batch_first, device=device, dtype=dtype)
         elif attention_type == "Scratch":
