@@ -69,7 +69,7 @@ class MultiHeadAttentionFromScratch(nn.Module):
 class LocalSlidingWindowAttention(nn.Module):
     ''' Sparse sliding window attention codee a la main en creant les windows 
     '''
-    def __init__(self, embedding_size, num_heads, window_size=20, dropout=0.1):
+    def __init__(self, embedding_size, num_heads, window_size=8, dropout=0.1):
         super().__init__()
 
         assert embedding_size % num_heads == 0, "Model embedding size is not compatible with the number of heads"
@@ -218,60 +218,54 @@ class EinsteinLocalAttention(nn.Module):
         return out, attn_probs
 
 class LocalSlidingWindowAttentionOptimized(nn.Module):
-    ''' Ici, au lieu de decouper les windows a la main, on utilise un mask et la methode scaled dot product attention de pytorch
-        Training plus rapide mais moins performant
-    '''
-    def __init__(self, embedding_size, num_heads, window_size=20, dropout=0.1):
+    def __init__(self, embedding_size, num_heads, window_size=8, dropout=0.1):
         super().__init__()
-        assert embedding_size % num_heads == 0, "Embedding size must be divisible by num_heads"
-        self.embedding_size = embedding_size
-        self.num_heads = num_heads
-        self.head_dim = embedding_size // num_heads
-        self.window = window_size
+        assert embedding_size % num_heads == 0
+        self.H = num_heads
+        self.D = embedding_size // num_heads
+        self.W = window_size
 
         self.Wq = nn.Linear(embedding_size, embedding_size)
         self.Wk = nn.Linear(embedding_size, embedding_size)
         self.Wv = nn.Linear(embedding_size, embedding_size)
         self.Wo = nn.Linear(embedding_size, embedding_size)
 
-        self.drop = nn.Dropout(dropout)
+        self.dropout = dropout
 
-    def forward(self, q, k=None, v=None):
-        if k is None: k = q
-        if v is None: v = k
-
+    def forward(self, q, k = None, v = None):
+        if k == None:
+            k = q 
+        if v == None:
+            v = k
         B, N, E = q.shape
-        Q = self.Wq(q).view(B, N, self.num_heads, self.head_dim).transpose(1, 2)  # (B, H, N, D)
-        K = self.Wk(k).view(B, N, self.num_heads, self.head_dim).transpose(1, 2)
-        V = self.Wv(v).view(B, N, self.num_heads, self.head_dim).transpose(1, 2)
+        
+        # Project QKV
+        Q = self.Wq(q).view(B, N, self.H, self.D).transpose(1, 2)
+        K = self.Wk(k).view(B, N, self.H, self.D).transpose(1, 2)
+        V = self.Wv(v).view(B, N, self.H, self.D).transpose(1, 2)
 
-        # Create sliding window mask
-        device = q.device
-        idxs = torch.arange(N, device=device)
-        # (N, N) mask where True means "mask this"
-        mask = (idxs[None, :] - idxs[:, None]).abs() > self.window
-        # Expand mask to (B*H, N, N) for scaled_dot_product_attention
-        attn_mask = mask[None, :, :].expand(self.num_heads, -1, -1)
+        # Build sliding mask ONCE on device
+        idxs = torch.arange(N, device=q.device)
+        dist = (idxs[None, :] - idxs[:, None]).abs()
+        
+        # float mask for fast SDPA: masked = -inf, allowed = 0
+        float_mask = torch.zeros((N, N), device=q.device)
+        float_mask[dist > self.W] = float('-inf')
+        
+        # Add batch/head broadcast: (B, H, N, N)
+        float_mask = float_mask.unsqueeze(0).unsqueeze(0)
 
-        # scaled_dot_product_attention expects (B*H, N, D)
-        Q_flat = Q.reshape(B * self.num_heads, N, self.head_dim)
-        K_flat = K.reshape(B * self.num_heads, N, self.head_dim)
-        V_flat = V.reshape(B * self.num_heads, N, self.head_dim)
-
-        # Compute attention with mask
+        # IMPORTANT: (B, H, N, D) input shape for fast kernels
         out = F.scaled_dot_product_attention(
-            Q_flat, K_flat, V_flat,
-            attn_mask=attn_mask.repeat(B, 1, 1),  # (B*H, N, N)
-            dropout_p=self.drop.p,
+            Q, K, V,
+            attn_mask=float_mask,      # additive mask
+            dropout_p=self.dropout,    # will be disabled during eval
             is_causal=False
         )
 
-        # Reshape back and project
-        out = out.view(B, self.num_heads, N, self.head_dim).transpose(1, 2).contiguous()
-        out = out.view(B, N, E)
-        out = self.Wo(out)
-        #print("output shape = ", out.shape, flush = True)
-        return out, idxs
+        # Merge heads
+        out = out.transpose(1, 2).reshape(B, N, E)
+        return self.Wo(out), float_mask
     
 
 class SparseAttention(nn.Module):
