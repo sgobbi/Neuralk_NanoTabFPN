@@ -81,7 +81,8 @@ def train(model: NanoTabPFNModel, prior: DataLoader,
     try:
         for step, full_data in enumerate(prior):
             step_start_time = time.time()
-            #torch.cuda.reset_peak_memory_stats(device)
+            torch.cuda.reset_peak_memory_stats(device)
+            
 
             train_test_split_index = full_data["train_test_split_index"]
             #if (torch.isnan(data[0]).any() or torch.isnan(data[1]).any()):
@@ -104,12 +105,12 @@ def train(model: NanoTabPFNModel, prior: DataLoader,
             optimizer.step()
             optimizer.zero_grad()
 
-
+            peak_mem_MB = torch.cuda.max_memory_allocated(device) / 1e6
+            current_mem_MB = torch.cuda.memory_allocated(device) / 1e6
             step_train_duration = time.time() - step_start_time
             cumulative_time += step_train_duration
 
-            #peak_mem_MB = torch.cuda.max_memory_allocated(device) / 1e6
-            #current_mem_MB = torch.cuda.memory_allocated(device) / 1e6
+            
 
             # evaluate
             if step % steps_per_eval == steps_per_eval-1:
@@ -118,7 +119,9 @@ def train(model: NanoTabPFNModel, prior: DataLoader,
                 history_entry = {"step": step, 
                                  "cumulative time":cumulative_time, 
                                  "step time": step_train_duration, 
-                                 "train loss": total_loss}
+                                 "train loss": total_loss, 
+                                 "current mem MB": current_mem_MB, 
+                                 "peak mem MB": peak_mem_MB}
 
                 if eval_func is not None:
                     model.eval()
@@ -148,6 +151,8 @@ def train(model: NanoTabPFNModel, prior: DataLoader,
 
 class PriorDumpDataLoader(DataLoader):
     """DataLoader that loads synthetic prior data from an HDF5 dump.
+    Est compatible avec des tables de tailles differentes puisqu'il va 
+    yield un tenseur de taille (batch size, max_rows in the batch, max features in the batch)
 
     Args:
         filename (str): Path to the HDF5 file.

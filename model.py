@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torch.nn.modules.transformer import MultiheadAttention, Linear, LayerNorm
-from attentions import MultiHeadAttentionFromScratch, LocalSlidingWindowAttention, LocalSlidingWindowAttentionOptimized, SparseAttention
+from attentions import MultiHeadAttentionFromScratch, LocalSlidingWindowAttention, LocalSlidingWindowAttentionOptimized, SparseAttention, EinsteinLocalAttention
 
 class NanoTabPFNModel(nn.Module):
     def __init__(self, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int, num_layers: int, num_outputs: int, attention_type: str = "Original"):
@@ -111,6 +111,9 @@ class TransformerEncoderLayer(nn.Module):
             self.self_attention_between_datapoints_test = MultiHeadAttentionFromScratch(embedding_size, nhead)
         elif attention_type == "Local":
             self.self_attention_between_datapoints_train = LocalSlidingWindowAttention(embedding_size, nhead)
+            self.self_attention_between_datapoints_test = MultiHeadAttentionFromScratch(embedding_size, nhead)
+        elif attention_type == "Einstein":
+            self.self_attention_between_datapoints_train = EinsteinLocalAttention(embedding_size, nhead)
             self.self_attention_between_datapoints_test = MultiHeadAttentionFromScratch(embedding_size, nhead)
         elif attention_type == "Optimized Local":
             self.self_attention_between_datapoints_train = LocalSlidingWindowAttentionOptimized(embedding_size, nhead)

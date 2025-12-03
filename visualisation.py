@@ -144,14 +144,16 @@ def measure_inference_time_from_state_dict(state_dict_path: str, embedding_size,
     return avg_time_per_sample
 
 
-def summarize_training_times(model_histories):
+def summarize_training_times_and_memory_usage(model_histories):
     """
     model_histories: dict {model_name: pd.DataFrame}
 
     Returns a dataframe with:
     - model name
     - full training time (seconds)
-    - average step training time (seconds)
+    - average step training time (seconds), 
+    - average mem usage
+    - average peak mem usage
     """
     rows = []
 
@@ -159,11 +161,15 @@ def summarize_training_times(model_histories):
 
         full_training_time = df["cumulative time"].iloc[-1]
         avg_step_time = df["step time"].mean()
+        avg_mem = df["current mem MB"].mean()
+        avg_peak_mem = df["peak mem MB"].mean()
 
         rows.append({
             "model name": model_name,
             "full training time": full_training_time,
-            "average step time": avg_step_time
+            "average step time": avg_step_time, 
+            "average mem per step": avg_mem, 
+            "average peak mem per step": avg_peak_mem
         })
 
     return pd.DataFrame(rows)
@@ -207,7 +213,7 @@ def collect_inference_times(model_state_dicts):
                                                   num_heads= 4, 
                                                   mlp_hidden_size= 192, 
                                                   num_layers= 1, 
-                                                  num_outputs= 3, 
+                                                  num_outputs= 7, 
                                                   attention_type=model_name, 
                                                   dataset = dataset
                                                     )
@@ -217,11 +223,11 @@ def collect_inference_times(model_state_dicts):
                                                   num_heads= 4, 
                                                   mlp_hidden_size= 192, 
                                                   num_layers= 3, 
-                                                  num_outputs= 3, 
+                                                  num_outputs= 7, 
                                                   attention_type=model_name, 
                                                   dataset = dataset
                                                     )
-            row[col_name] = inf_time
+            row[f"inference time for {col_name}"] = inf_time
 
         rows.append(row)
 

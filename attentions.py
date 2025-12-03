@@ -153,7 +153,69 @@ class LocalSlidingWindowAttention(nn.Module):
         out = self.Wo(out)
         #print("out shape:", out.shape, flush = True)
         return out, attn_probs
-    
+
+class EinsteinLocalAttention(nn.Module):
+    """
+    Efficient sliding-window (local) attention without unfold.
+    """
+    def __init__(self, embed_dim, num_heads, window_size=20, dropout=0.1):
+        super().__init__()
+        assert embed_dim % num_heads == 0, "embed_dim must be divisible by num_heads"
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.head_dim = embed_dim // num_heads
+        self.window = window_size
+
+        self.Wq = nn.Linear(embed_dim, embed_dim)
+        self.Wk = nn.Linear(embed_dim, embed_dim)
+        self.Wv = nn.Linear(embed_dim, embed_dim)
+        self.Wo = nn.Linear(embed_dim, embed_dim)
+        self.drop = nn.Dropout(dropout)
+
+    def forward(self, q, k = None, v = None):
+        """
+        x: (B, N, embed_dim)
+        returns: (B, N, embed_dim)
+        """
+        if k  == None:
+            k = q 
+        if v == None:
+            v = k
+
+        B, N, C = q.shape
+        H = self.num_heads
+        D = self.head_dim
+
+        # 1. Linear projections
+        Q = self.Wq(q).view(B, N, H, D).transpose(1, 2)  # (B, H, N, D)
+        K = self.Wk(k).view(B, N, H, D).transpose(1, 2)
+        V = self.Wv(v).view(B, N, H, D).transpose(1, 2)
+
+        out = torch.zeros_like(Q)  # (B, H, N, D)
+        scale = D ** 0.5
+
+        # 2. Efficient local attention via slicing
+        for i in range(N):
+            start = max(0, i - self.window // 2)
+            end = min(N, i + self.window // 2 + 1)
+
+            # Slice only the local window
+            q_i = Q[:, :, i, :].unsqueeze(-2)       # (B, H, 1, D)
+            k_window = K[:, :, start:end, :]        # (B, H, w, D)
+            v_window = V[:, :, start:end, :]        # (B, H, w, D)
+
+            # Compute attention scores: (B, H, 1, w)
+            attn_scores = torch.einsum('bhid,bhjd->bhij', q_i, k_window) / scale
+            attn_probs = F.softmax(attn_scores, dim=-1)
+            attn_probs = self.drop(attn_probs)
+
+            # Weighted sum: (B, H, 1, D)
+            out[:, :, i, :] = torch.einsum('bhij,bhjd->bhid', attn_probs, v_window).squeeze(-2)
+
+        # 3. Combine heads
+        out = out.transpose(1, 2).contiguous().view(B, N, C)
+        out = self.Wo(out)
+        return out, attn_probs
 
 class LocalSlidingWindowAttentionOptimized(nn.Module):
     ''' Ici, au lieu de decouper les windows a la main, on utilise un mask et la methode scaled dot product attention de pytorch
@@ -259,10 +321,10 @@ class SparseAttention(nn.Module):
         
         # Apply sparse mask
         sparse_mask = self.create_sparse_mask(seq_len, q.device)
-        scores = scores.masked_fill(sparse_mask == 0, -1e9)
+        scores = scores.masked_fill(sparse_mask == 0, float('-inf'))
         
         if mask is not None:
-            scores = scores.masked_fill(mask == 0, -1e9)
+            scores = scores.masked_fill(mask == 0, float('-inf'))
         
         attn = torch.softmax(scores, dim=-1)
         attn = self.dropout(attn)

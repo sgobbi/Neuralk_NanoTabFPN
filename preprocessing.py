@@ -20,13 +20,19 @@ def load_dataset(dataset_id):
 def create_h5_prior_from_X_y(X, y, filename, 
                                  num_tasks=5000,
                                  total_rows=40,
-                                 train_rows=30):
+                                 train_rows=30, 
+                                 num_features = 8, 
+                                 shuffle_columns_for_each_task = True):
 
     X_np = np.ascontiguousarray(X.to_numpy(), dtype='float32')
     y_np = np.ascontiguousarray(pd.Categorical(y).codes, dtype='int32')
 
-    num_features = X_np.shape[1]
+    num_features_full_database = X_np.shape[1]
     max_num_classes = len(np.unique(y_np))
+
+    if not shuffle_columns_for_each_task:
+        #on prend un sample de taille num_features de l'array [0, num_features_full_database]
+        fixed_cols = np.random.choice(num_features_full_database, size=num_features, replace=False)
 
     with h5py.File(filename, "w") as f:
         f.create_dataset("X", shape=(num_tasks, total_rows, num_features), dtype='float32')
@@ -40,13 +46,22 @@ def create_h5_prior_from_X_y(X, y, filename,
         n_samples = len(X_np)
 
         for i in range(num_tasks):
+            # on choisit aleatoirement total_rows rows parmi celle du dataset avec remplacement (on peut avoir plusieurs fois la meme)
             idx = np.random.choice(n_samples, total_rows, replace=True)
 
-            X_task = X_np[idx].astype('float32')
+            #on choisit les colonnes (soit rechoisit aleatoirement a chaque task, soit on prend celle fixes au debut)
+            if shuffle_columns_for_each_task:
+                cols = np.random.choice(num_features_full_database, size=num_features, replace=False)
+            else:
+                cols = fixed_cols
+
+
+            X_task = X_np[idx][:, cols].astype('float32')
             y_task = y_np[idx].astype('float32')
 
-            f["X"][i, :, :] = X_task
-            f["y"][i, :] = y_task
+    
+            f["X"][i] = X_task
+            f["y"][i] = y_task
 
             f["num_features"][i] = num_features
             f["num_datapoints"][i] = total_rows
@@ -55,6 +70,6 @@ def create_h5_prior_from_X_y(X, y, filename,
     print(f"Saved tasks here here  to {filename}")
 
 
-def create_h5_prior_from_dataset(dataset_id, filename, num_tasks = 5000, total_rows = 40, train_rows = 30):
+def create_h5_prior_from_dataset(dataset_id, filename, num_tasks = 5000, total_rows = 40, train_rows = 30, num_features = 8, shuffle_columns_for_each_task = True):
     X,y = load_dataset(dataset_id)
-    create_h5_prior_from_X_y(X, y ,filename, num_tasks, total_rows, train_rows) 
+    create_h5_prior_from_X_y(X, y ,filename, num_tasks, total_rows, train_rows, num_features, shuffle_columns_for_each_task) 
