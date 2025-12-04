@@ -273,7 +273,7 @@ class LocalSlidingWindowAttentionOptimized(nn.Module):
 
 class SparseAttention(nn.Module):
     """Implementation tiree d'un article """
-    def __init__(self, d_model, n_heads, dropout=0.1, local_window=8):
+    def __init__(self, d_model, n_heads, dropout=0.1, local_window=4):
         super().__init__()
         assert d_model % n_heads == 0
         
@@ -281,6 +281,7 @@ class SparseAttention(nn.Module):
         self.n_heads = n_heads
         self.d_k = d_model // n_heads
         self.local_window = local_window
+        print("local window size: ", self.local_window, flush = True)
         
         self.w_q = nn.Linear(d_model, d_model, bias=False)
         self.w_k = nn.Linear(d_model, d_model, bias=False)
