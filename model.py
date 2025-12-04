@@ -19,6 +19,7 @@ class NanoTabPFNModel(nn.Module):
 
     def forward(self, src: tuple[torch.Tensor, torch.Tensor], train_test_split_index: int) -> torch.Tensor:
         x_src, y_src = src
+      
         # we expect the labels to look like (batches, num_train_datapoints, 1),
         # so we add the last dimension if it is missing
         if len(y_src.shape) < len(x_src.shape):
@@ -26,6 +27,7 @@ class NanoTabPFNModel(nn.Module):
         # from here on B=Batches, R=Rows, C=Columns, E=embedding size
         # converts scalar values to embeddings, so (B,R,C-1) -> (B,R,C-1,E)
         x_src = self.feature_encoder(x_src, train_test_split_index)
+        #print("x src shape:", x_src[0,0,:,:])
         num_rows = x_src.shape[1]
         # padds the y_train up to y by using the mean,
         # then converts scalar values to embeddings (B,R,1,E)
@@ -33,11 +35,13 @@ class NanoTabPFNModel(nn.Module):
         # concatenates the feature embeddings with the target embeddings
         # to give us the full table of embeddings (B,R,C,E))
         src = torch.cat([x_src, y_src], 2)
+        
         # repeatedly applies the transformer block on (B,R,C,E)
         for block in self.transformer_blocks:
             src = block(src, train_test_split_index=train_test_split_index)
         # selects the target embeddings (B,num_targets,1,E)
         output = src[:, train_test_split_index:, -1, :]
+        
         # runs the embeddings through the decoder to get
         # the logits of our predictions (B,num_targets,num_classes)
         output = self.decoder(output)
@@ -63,10 +67,16 @@ class FeatureEncoder(nn.Module):
                            the embeddings of the features
         """
         x = x.unsqueeze(-1)
+        x = torch.nan_to_num(x, nan=0.0)
+        #print("x encoder before norm", x[0,0,:,:])
+        #print("Any NaN in x? ", x.isnan().any())
         mean = torch.mean(x[:, :train_test_split_index], dim=1, keepdims=True)
+        #print("mean shape", mean.shape)
+        #print("mean ", mean[0,0,:,:])
         std = torch.std(x[:, :train_test_split_index], dim=1, keepdims=True) + 1e-20
         x = (x-mean)/std
         x = torch.clip(x, min=-100, max=100)
+        #print("x encoder after norm", x[0,0,:,:])
         return self.linear_layer(x)
 
 class TargetEncoder(nn.Module):
@@ -197,7 +207,7 @@ class NanoTabPFNClassifier():
         """ stores X_train and y_train for later use, also computes the highest class number occuring in num_classes """
         self.X_train = X_train
         self.y_train = y_train
-        self.num_classes = max(set(y_train))+1
+        self.num_classes = int(max(set(y_train))+1)
 
     def predict_proba(self, X_test: np.array) -> np.array:
         """

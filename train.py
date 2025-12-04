@@ -11,6 +11,7 @@ from sklearn.metrics import accuracy_score, balanced_accuracy_score, roc_auc_sco
 from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.utils.data import DataLoader
+from sklearn.model_selection import StratifiedKFold
 
 
 def set_randomness_seed(seed):
@@ -47,7 +48,7 @@ def eval(classifier):
     scores = {k:v/len(datasets) for k,v in scores.items()}
     return scores
 
-def train(model: NanoTabPFNModel, prior: DataLoader,
+def train(model: NanoTabPFNModel, prior: DataLoader, eval_loader = None, 
           lr: float = 1e-4, device: torch.device = None, steps_per_eval=10, eval_func=None):
     """
     Trains our model on the given prior using the given criterion.
@@ -91,11 +92,20 @@ def train(model: NanoTabPFNModel, prior: DataLoader,
                     full_data["y"][:, :train_test_split_index].to(device))
             targets = full_data["y"].to(device)
 
+           
             output = model(data, train_test_split_index=train_test_split_index)
             targets = targets[:, train_test_split_index:]
 
+
             targets = targets.reshape((-1,)).to(torch.long)
             output = output.view(-1, output.shape[-1])
+
+            #print("output shape: ", output.shape)
+            #print("target shape: ", targets.shape)
+            #print("output : ", output[0])
+            #print("target shape: ", targets[0])
+            
+
 
             loss = criterion(output, targets).mean()
             loss.backward()
@@ -123,22 +133,40 @@ def train(model: NanoTabPFNModel, prior: DataLoader,
                                  "current mem MB": current_mem_MB, 
                                  "peak mem MB": peak_mem_MB}
 
-                if eval_func is not None:
+                if eval_loader is not None:
                     model.eval()
-                    optimizer.eval()
                     classifier = NanoTabPFNClassifier(model, device)
-                    scores = eval_func(classifier)
-                    for k,v in scores.items():
-                        history_entry[k] = v
+
+                    all_preds, all_targets = [], []
+                    datasets = []
+
+                    with torch.no_grad():
+                        for batch in eval_loader:
+                            x_eval = batch["x"].to(device)
+                            y_eval = batch["y"].to(device).reshape(-1)
+                            X_np = x_eval.cpu().numpy()
+                            y_np = y_eval.cpu().numpy().reshape(-1)
+                            X_flat = X_np.reshape(-1, X_np.shape[2])  # (batch_size * seq_len, num_features)
+                            y_flat = y_np.reshape(-1)
+                            datasets.append((X_flat, y_flat))
+                            #print("x_eval shape:", x_eval.shape)
+                            #print("y_eval shape:", y_eval.shape)
+
+
+                            #y_pred = classifier.predict(x_eval)
+                            #all_preds.append(y_pred)
+                            #all_targets.append(y_eval.cpu().numpy())
+                    metrics = evaluate_model(classifier, datasets)
+
+                    print("metric keys: " , metrics.keys())
                     
-                    score_str = " | ".join([f"{k}: {v:.4f}" for k, v in scores.items()])
-                    print(
-                        f"time {cumulative_time:.1f}s | "
-                        f"loss {total_loss:.4f} | {score_str}"
-                    )
+                    for k, v in metrics.items():
+                        history_entry[k] = v
+
+                    metric_str = " | ".join([f"{k}: {v:.4f}" for k, v in metrics.items()])
+                    print(f"time {cumulative_time:.1f}s | loss {total_loss:.4f} | {metric_str}")
 
                     model.train()
-                    optimizer.train()
                 else:
                     print(f"time {cumulative_time:7.1f}s | loss {total_loss:7.4f}")
 
@@ -210,3 +238,40 @@ if __name__ == "__main__":
     model, history = train(model, prior, lr=4e-3, steps_per_eval=25)
     print("Final evaluation:")
     print(eval(NanoTabPFNClassifier(model, device)))
+
+
+_skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
+def evaluate_model(model, datasets):
+    """Evaluates a model on multiple datasets and returns metrics
+    
+    This method takes a model we want to evaluate as input, and a dictionnary of datasets where the key is the name of the dataset
+    and the value being a tuple (X,y) of the features and labels 
+    It then does a 5 fold cross validation for every dataset, calculating its Roc_Auc_score 
+    It returns a dictionnary {dataset_name/ROC_AUC: roc_auc_score} with also an average of this metric over all datasets 
+    """ 
+    metrics = {}
+    for i, (X,y)  in enumerate(datasets):
+        targets = []
+        probabilities = []
+        
+        for train_idx, test_idx in _skf.split(X, y):
+            X_train, X_test = X[train_idx], X[test_idx]
+            y_train, y_test  = y[train_idx], y[test_idx]
+            targets.append(y_test)
+            model.fit(X_train, y_train)
+            y_proba = model.predict_proba(X_test)
+            if y_proba.shape[1] == 2:  # binary classification with neural network
+                y_proba = y_proba[:, 1]
+            probabilities.append(y_proba)
+    
+        targets = np.concatenate(targets, axis=0)
+        probabilities = np.concatenate(probabilities, axis=0)
+
+        metrics[f"{i}/ROC AUC"] = roc_auc_score(targets, probabilities, multi_class="ovr")
+    
+    metric_names = list({key.split("/")[-1] for key in metrics.keys()})
+    for metric_name in metric_names:
+        avg_metric = np.mean([metrics[key] for key in metrics.keys() if key.endswith(metric_name)])
+        metrics[f"{metric_name}"] = float(avg_metric)
+    
+    return {"ROC AUC" : metrics["ROC AUC"]}
