@@ -1,33 +1,25 @@
-# nanoTabPFN
+# Making Attention Cheaper: Exploring Efficient Mechanisms in nanoTabPFN
 
-Train your own small TabPFN in less than 500 LOC and a few minutes.
 
-The purpose of this repository is to be a good starting point for students and researchers that are interested in learning about how TabPFN works under the hood.
-
-Clone the repository, afterwards install dependencies via:
+Clone the repository, afterwards create the conda environment:
 ```
-pip install numpy torch schedulefree h5py scikit-learn openml seaborn
+conda env create -f environment.yml
+```
+
+and activate it:
+```
+conda activate NanoTabPFN
 ```
 
 ### Our Code
 
 - `model.py` contains the implementation of the architecture and a sklearn-like interface in less than 200 lines of code. 
 - `train.py` implements a simple training loop and prior dump data loader in under 200 lines
-- `experiment.ipynb` will recreate the experiment from the paper
+- `attentions.py` implements the different attention mechanisms
+- `visualisation.py` implements the different plotting methods (training loss, roc auc, inference time...)
+- `preprocessing.py` implements the methods necessary to download datasets from openml, sample tasks from them, and turn them into a h5 file compatible with the DataLoader
+- `experiment_adult.ipynb` reacreates the experiments we did to compare different attention mechanisms 
 
-
-### Pretrain your own nanoTabPFN
-
-To pretrain your own nanoTabPFN, you need to first download a prior data dump from [here](http://ml.informatik.uni-freiburg.de/research-artifacts/nanoTabPFN/300k_150x5_2.h5), then run `train.py`.
-
-```bash
-cd nanoTabPFN
-
-# download data dump
-curl http://ml.informatik.uni-freiburg.de/research-artifacts/nanoTabPFN/300k_150x5_2.h5 --output 300k_150x5_2.h5
-
-python train.py
-```
 
 #### Step by Step explanation:
 
@@ -86,20 +78,4 @@ print('ROC AUC', roc_auc_score(y_test, prob))
 print('Accuracy', accuracy_score(y_test, pred))
 ```
 
-### TFM-Playground
 
-The nanoTabPFN repository is supposed to stay ultra small and simple, but we created another repository,
-the [TFM-Playground](https://github.com/automl/TFM-Playground/) which we are building out to have a lot more features,
-like regression, multiple prior interfaces, multiple architectures, ensembling of different pre-processings and more,
-so check it out if you are interested!
-
-### BibTex Citation
-
-```
-@article{pfefferle2025nanotabpfn,
-  title={nanoTabPFN: A Lightweight and Educational Reimplementation of TabPFN},
-  author={Pfefferle, Alexander and Hog, Johannes and Purucker, Lennart and Hutter, Frank},
-  journal={arXiv preprint arXiv:2511.03634},
-  year={2025}
-}
-```
