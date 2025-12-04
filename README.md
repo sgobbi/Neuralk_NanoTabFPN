@@ -23,6 +23,11 @@ conda activate NanoTabPFN
 
 #### Step by Step explanation:
 
+First we generate our train and test sets from an openml dataset of our choice (179 in our case)
+```
+create_h5_prior_from_dataset(179, "h5_files/TRAIN_500_adult_database_100_80_rows_13_features.h5","h5_files/TEST_500_adult_database_100_80_rows_13_features.h5" , num_tasks = 500, total_rows = 100, train_rows=80, num_features=13)
+```
+
 First we import our code from model.py and train.py
 ```py
 from model import NanoTabPFNModel
@@ -30,23 +35,30 @@ from model import NanoTabPFNClassifier
 from train import PriorDumpDataLoader
 from train import train, get_default_device
 ```
-Then we instantiate our model
+Then we instantiate our model with the attention mechanism of your choice (Original, Scratch, Sparse, Local, Pooling)
 ```py
 model = NanoTabPFNModel(
     embedding_size=96,
     num_attention_heads=4,
     mlp_hidden_size=192,
     num_layers=3,
-    num_outputs=2
+    num_outputs=2,
+    attention_type = "Scratch"
 )
 ```
-and our dataloader
+and our dataloaders from the train and test H5 files we have created and stored 
 ```py
 prior = PriorDumpDataLoader(
-    "300k_150x5_2.h5",
-    num_steps=2500,
-    batch_size=32,
-)
+        "h5_files/TRAIN_500_adult_database_100_80_rows_13_features.h5", 
+        num_steps=2000, 
+        batch_size=32, 
+        device=device)
+eval_loader = PriorDumpDataLoader(
+        "h5_files/TRAIN_500_adult_database_100_80_rows_13_features.h5",
+        num_steps=150,      # use all data once
+        batch_size=1,
+        device=device
+    )
 ```
 Now we can train our model:
 ```py
@@ -54,28 +66,10 @@ device = get_default_device()
 model, _ = train(
     model,
     prior,
+    eval_loader = eval_loader
     lr = 4e-3,
     device = device
 )
-```
-and finally we can instantiate our classifier:
-```py
-clf = NanoTabPFNClassifier(model, device)
-```
-and use its `.fit`, `.predict` and `.predict_proba`:
-```py
-from sklearn.datasets import load_breast_cancer
-from sklearn.metrics import roc_auc_score, accuracy_score
-from sklearn.model_selection import train_test_split
-
-X, y = load_breast_cancer(return_X_y=True)
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5)
-
-clf.fit(X_train, y_train)
-prob = clf.predict_proba(X_test)
-pred = clf.predict(X_test)
-print('ROC AUC', roc_auc_score(y_test, prob))
-print('Accuracy', accuracy_score(y_test, pred))
 ```
 
 
