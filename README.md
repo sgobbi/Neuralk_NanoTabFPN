@@ -80,3 +80,20 @@ print(f"Saved model to {save_path}")
 for history in histories:
     history.to_csv(f"adult_histories/nanotabpfn_scratch_attention.csv", index = False)
 ```
+
+We load the histories and use the visualisation.py methods to plot the different curves
+```
+loaded_history_original = pd.read_csv("adult_histories/nanotabpfn_original.csv")
+loaded_history_scratch = pd.read_csv("adult_histories/nanotabpfn_scratch_attention.csv")
+loaded_history_sparse = pd.read_csv("adult_histories/nanotabpfn_sparse_attention.csv")
+loaded_history_local = pd.read_csv("adult_histories/nanotabpfn_local_attention.csv")
+loaded_history_pool = pd.read_csv("adult_histories/nanotabpfn_pooling_attention.csv")
+model_histories_final = { "Original" : loaded_history_original,
+                        "Scratch": loaded_history_scratch,
+                         "Sparse" : loaded_history_sparse,
+                         "Local" : loaded_history_local,
+                          "Pooling": loaded_history_pool
+                          }
+
+plot_metric("train loss vs time", model_histories_final)
+```
