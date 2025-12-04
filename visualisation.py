@@ -1,9 +1,10 @@
-import matplotlib.pyplot as plt
-import torch
-import pandas as pd
-from model import NanoTabPFNModel
-import time
 from train import PriorDumpDataLoader
+from model import NanoTabPFNModel
+import matplotlib.pyplot as plt
+import pandas as pd
+import torch
+import time
+
 
 def plot_train_loss_vs_step(model_histories, label=None):
     """
@@ -75,6 +76,30 @@ def plot_metric(metric: str, model_histories: dict):
         plot_train_loss_vs_step(model_histories)
 
 
+def summarize_training_times_and_memory_usage(model_histories):
+    
+    rows = []
+
+    for model_name, df in model_histories.items():
+
+        full_training_time = df["cumulative time"].iloc[-1]
+        avg_step_time = df["step time"].mean()
+        avg_mem = df["current mem MB"].mean()
+        avg_peak_mem = df["peak mem MB"].mean()
+
+        rows.append({
+            "model name": model_name,
+            "full training time": full_training_time,
+            "average step time": avg_step_time, 
+            "average mem per step": avg_mem, 
+            "average peak mem per step": avg_peak_mem
+        })
+
+    return pd.DataFrame(rows)
+
+
+
+
 def measure_inference_time_from_state_dict(state_dict_path: str, embedding_size, num_heads, mlp_hidden_size, num_layers, num_outputs, 
                                            attention_type, 
                                            dataset, 
@@ -82,16 +107,6 @@ def measure_inference_time_from_state_dict(state_dict_path: str, embedding_size,
     """
     On load le modele depuis son state_dict et on mesure le inference time per sample moyen.
     
-    Args:
-        model_class: the class of your model (e.g., NanoTabPFNModel)
-        state_dict_path: path to the .pt file storing the state dict
-        dataset: Dataset or DataLoader to run inference on
-        batch_size: batch size for inference
-        device: torch.device to use. If None, uses CUDA if available.
-        **model_kwargs: keyword arguments to instantiate your model_class
-        
-    Returns:
-        avg_time_per_sample: average inference time per sample (seconds)
     """
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -108,7 +123,7 @@ def measure_inference_time_from_state_dict(state_dict_path: str, embedding_size,
     model.to(device)
     model.eval()
     
-    # Create DataLoader if dataset is not one already
+    
     if not isinstance(dataset, torch.utils.data.DataLoader):
         dataloader = torch.utils.data.DataLoader(dataset, batch_size=12, shuffle=False)
     else:
@@ -144,35 +159,6 @@ def measure_inference_time_from_state_dict(state_dict_path: str, embedding_size,
     return avg_time_per_sample
 
 
-def summarize_training_times_and_memory_usage(model_histories):
-    """
-    model_histories: dict {model_name: pd.DataFrame}
-
-    Returns a dataframe with:
-    - model name
-    - full training time (seconds)
-    - average step training time (seconds), 
-    - average mem usage
-    - average peak mem usage
-    """
-    rows = []
-
-    for model_name, df in model_histories.items():
-
-        full_training_time = df["cumulative time"].iloc[-1]
-        avg_step_time = df["step time"].mean()
-        avg_mem = df["current mem MB"].mean()
-        avg_peak_mem = df["peak mem MB"].mean()
-
-        rows.append({
-            "model name": model_name,
-            "full training time": full_training_time,
-            "average step time": avg_step_time, 
-            "average mem per step": avg_mem, 
-            "average peak mem per step": avg_peak_mem
-        })
-
-    return pd.DataFrame(rows)
 
 
 def collect_inference_times(model_state_dicts):
@@ -213,7 +199,7 @@ def collect_inference_times(model_state_dicts):
                                                   num_heads= 4, 
                                                   mlp_hidden_size= 192, 
                                                   num_layers= 1, 
-                                                  num_outputs= 7, 
+                                                  num_outputs= 2, 
                                                   attention_type=model_name, 
                                                   dataset = dataset
                                                     )
@@ -223,7 +209,7 @@ def collect_inference_times(model_state_dicts):
                                                   num_heads= 4, 
                                                   mlp_hidden_size= 192, 
                                                   num_layers= 3, 
-                                                  num_outputs= 7, 
+                                                  num_outputs= 2, 
                                                   attention_type=model_name, 
                                                   dataset = dataset
                                                     )

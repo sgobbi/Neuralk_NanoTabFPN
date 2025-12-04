@@ -26,9 +26,6 @@ from sklearn.pipeline import Pipeline
 
 
 
-def create_nthing():
-    return False
-
 def load_dataset(dataset_id):
     dataset = openml.datasets.get_dataset(dataset_id, download_all_files=True)
     X, y, _, _ = dataset.get_data(
@@ -107,15 +104,7 @@ def create_h5_prior_from_X_y(X, y, filename,
     print(f"Saved tasks here here  to {filename}")
 
 
-def create_h5_prior_from_dataset(dataset_id, filename_train, filename_test, num_tasks = 5000, total_rows = 40, train_rows = 30, num_features = 8, shuffle_columns_for_each_task = True):
-    X,y, X_eval, y_eval = load_dataset(dataset_id)
-    create_h5_prior_from_X_y(X, y ,filename_train, int(0.7* num_tasks), total_rows, train_rows, num_features, shuffle_columns_for_each_task) 
-    create_h5_prior_from_X_y(X_eval, y_eval ,filename_test, int(0.3*num_tasks), total_rows, train_rows, num_features, shuffle_columns_for_each_task)
-
-
-
-
-def create_h5_prior_from_dataset2(dataset_id, train_filename, test_filename,
+def create_h5_prior_from_dataset(dataset_id, train_filename, test_filename,
                                  num_tasks=5000, 
                                  total_rows=40, 
                                  train_rows=30, 
@@ -123,19 +112,13 @@ def create_h5_prior_from_dataset2(dataset_id, train_filename, test_filename,
                                  shuffle_columns_for_each_task=True):
     """
     Download an OpenML dataset, preprocess it (numeric + categorical features),
-    encode labels, and create an HDF5 file ready for PFN training.
-    
-    Parameters:
-        dataset_id: OpenML dataset ID
-        filename: Path to save HDF5
-        num_tasks: Number of tasks to generate in HDF5
-        total_rows: Number of total rows per task
-        train_rows: Number of rows used for training (rest for evaluation)
-        num_features: Number of features per task
-        shuffle_columns_for_each_task: If True, sample different columns per task
+    encode labels, separe entre un train et un test set and create an HDF5 file ready for PFN training.
+
+    - download openML dataset
+    - preprocess it avec le preprocessor du codebase original
+    - create a H5 file avec des tasks samplees depuis la base de donnees 
     """
-    # 1️⃣ Load dataset
- 
+    
     X, y,  X_eval, y_eval = load_dataset(dataset_id)
     
     
@@ -144,16 +127,14 @@ def create_h5_prior_from_dataset2(dataset_id, train_filename, test_filename,
     print("X test ", X_eval.shape)
     print("y test ", y_eval.shape)
 
-    # 2️⃣ Preprocess features
+
     preprocessor = get_feature_preprocessor(X)
     X_train_processed = preprocessor.fit_transform(X).astype(np.float32)
     X_test_processed = preprocessor.fit_transform(X_eval).astype(np.float32)
 
-    # 3️⃣ Encode labels to 0..num_classes-1
     y_train_encoded = pd.Categorical(y).codes.astype(np.int32)
     y_test_encoded = pd.Categorical(y_eval).codes.astype(np.int32)
 
-    # 4️⃣ Save to HDF5
   
     create_h5_prior_from_X_y(X_train_processed, y_train_encoded, train_filename,
                              num_tasks= int(0.7*num_tasks),
@@ -175,7 +156,10 @@ def create_h5_prior_from_dataset2(dataset_id, train_filename, test_filename,
 
 
 
-
+def create_h5_prior_from_dataset_old(dataset_id, filename_train, filename_test, num_tasks = 5000, total_rows = 40, train_rows = 30, num_features = 8, shuffle_columns_for_each_task = True):
+    X,y, X_eval, y_eval = load_dataset(dataset_id)
+    create_h5_prior_from_X_y(X, y ,filename_train, int(0.7* num_tasks), total_rows, train_rows, num_features, shuffle_columns_for_each_task) 
+    create_h5_prior_from_X_y(X_eval, y_eval ,filename_test, int(0.3*num_tasks), total_rows, train_rows, num_features, shuffle_columns_for_each_task)
 
 # preprocessing from the original codebase
 

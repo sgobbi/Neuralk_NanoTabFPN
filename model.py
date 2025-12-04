@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torch.nn.modules.transformer import MultiheadAttention, Linear, LayerNorm
-from attentions import MultiHeadAttentionFromScratch, LocalSlidingWindowAttention, LocalSlidingWindowAttentionOptimized, SparseAttention, EinsteinLocalAttention
+from attentions import MultiHeadAttentionFromScratch, LocalSlidingWindowAttention, MultiHeadAttentionWithPooling, LocalSlidingWindowAttentionOptimized, PoolingAttention,SparseAttention, EinsteinLocalAttention
 
 class NanoTabPFNModel(nn.Module):
     def __init__(self, embedding_size: int, num_attention_heads: int, mlp_hidden_size: int, num_layers: int, num_outputs: int, attention_type: str = "Original"):
@@ -115,6 +115,9 @@ class TransformerEncoderLayer(nn.Module):
         
         if attention_type == "Original":
             self.self_attention_between_datapoints_train = MultiheadAttention(embedding_size, nhead, batch_first=batch_first, device=device, dtype=dtype)
+            self.self_attention_between_datapoints_test = MultiheadAttention(embedding_size, nhead, batch_first=batch_first, device=device, dtype=dtype)
+        elif attention_type == "Pooling":
+            self.self_attention_between_datapoints_train = MultiHeadAttentionWithPooling(embedding_size, nhead)
             self.self_attention_between_datapoints_test = MultiheadAttention(embedding_size, nhead, batch_first=batch_first, device=device, dtype=dtype)
         elif attention_type == "Scratch":
             self.self_attention_between_datapoints_train = MultiHeadAttentionFromScratch(embedding_size, nhead)
