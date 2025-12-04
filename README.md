@@ -72,4 +72,11 @@ model, _ = train(
 )
 ```
 
-
+We then save the model state dict and the training history for further analysis and comparison
+```
+save_path = f"adult_models/nanotabpfn_scratch_attention.pt"
+torch.save(model.state_dict(), save_path)
+print(f"Saved model to {save_path}")
+for history in histories:
+    history.to_csv(f"adult_histories/nanotabpfn_scratch_attention.csv", index = False)
+```
